@@ -74,15 +74,15 @@ class CBAM(nn.Module):
     """
     CBAM 모듈: ChannelAttention + SpatialAttention 순차 적용
     """
-	def __init__(self, gate_channels, reduction_ratio=4):
-		super(CBAM, self).__init__()
-		self.ChannelGate = ChannelAttention(gate_channels, reduction_ratio)
-		self.SpatialGate = SpatialAttention()
+    def __init__(self, gate_channels, reduction_ratio=4):
+        super(CBAM, self).__init__()
+        self.ChannelGate = ChannelAttention(gate_channels, reduction_ratio)
+        self.SpatialGate = SpatialAttention()
 
-	def forward(self, x):
-		x = self.ChannelGate(x)
-		x = self.SpatialGate(x)
-		return x
+    def forward(self, x):
+        x = self.ChannelGate(x)
+        x = self.SpatialGate(x)
+        return x
 
 class FIRBandPass(nn.Module):
     """
@@ -365,7 +365,7 @@ def train_iter(model, src_x, src_y, tgt_x, opts,
     device = next(Fnet.parameters()).device
     src_x, src_y, tgt_x = src_x.to(device), src_y.to(device), tgt_x.to(device)
     
-    model.module.D.train()
+    model.D.train()
     wd_critic_list, wd_feat_list = [], []
     # ── (i) critic update ─────────────────────────────
     for _ in range(critic_steps):
@@ -376,7 +376,7 @@ def train_iter(model, src_x, src_y, tgt_x, opts,
             h_s = h_s.detach()
             h_t = h_t.detach()
 
-        wd_critic = model.module.D(h_s).mean() - model.module.D(h_t).mean()
+        wd_critic = model.D(h_s).mean() - model.D(h_t).mean()
         gp = gradient_penalty(Cri, h_s, h_t, lambda_gp)
         loss_d = -(wd_critic) + gp          # gradient ASCENT
         
@@ -391,12 +391,12 @@ def train_iter(model, src_x, src_y, tgt_x, opts,
     model.train()
     opt_fc.zero_grad()
     
-    h_s = model.module.F(src_x)
-    logit = model.module.C(h_s)  # Classifier output
+    h_s = model.F(src_x)
+    logit = model.C(h_s)  # Classifier output
     loss_c = F.cross_entropy(logit, src_y)
     
-    h_t = model.module.F(tgt_x)
-    wd_feat = model.module.D(h_s).mean() - model.module.D(h_t).mean()
+    h_t = model.F(tgt_x)
+    wd_feat = model.D(h_s).mean() - model.D(h_t).mean()
 
     loss_f = (wd_feat * mu) + loss_c
     loss_f.backward()
@@ -404,7 +404,7 @@ def train_iter(model, src_x, src_y, tgt_x, opts,
     
     # DepthwiseConv 가중치 Clip (max_norm)
     with torch.no_grad():
-        w = model.module.F.depth_convs.dw.weight  # shape: (out_ch, 1, kh, kw)
+        w = model.F.depth_convs.dw.weight  # shape: (out_ch, 1, kh, kw)
         # Compute L2 norm over each filter
         w_flat = w.view(w.size(0), -1)
         norms = w_flat.norm(p=2, dim=1, keepdim=True)
@@ -412,7 +412,7 @@ def train_iter(model, src_x, src_y, tgt_x, opts,
         desired = torch.clamp(norms, max=1.0)
         # Scale weights
         w_flat = w_flat * (desired / (1e-8 + norms))
-        model.module.F.depth_convs.dw.weight.copy_(w_flat.view_as(w))
+        model.F.depth_convs.dw.weight.copy_(w_flat.view_as(w))
 
     wd_feat_list.append(wd_feat.item())   # Feature 단계 직후의 wd 기록
 
